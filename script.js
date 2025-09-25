@@ -34,7 +34,7 @@ const statusStyles = {
   Below: { color: '#ef4444', text: 'Below' },
 };
 
-const BASE_BALL_SPEED = 6;
+const BASE_BALL_SPEED = 10;
 
 const paddle = {
   width: 140,
