@@ -23,7 +23,7 @@ const brickSettings = {
   width: 40,
   height: 24,
   padding: 5,
-  topOffset: 90,
+  topOffset: 60,
   leftOffset: 138,
 };
 
@@ -113,7 +113,7 @@ function createBricks() {
 
 function determineStatus(row, col) {
   if (row === 0) {
-    return 'Expected';
+    return 'Above';
   }
   if (row === brickSettings.rows - 1) {
     return 'Below';
