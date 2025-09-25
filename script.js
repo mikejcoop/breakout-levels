@@ -9,6 +9,8 @@ const startButton = document.getElementById('startButton');
 const restartButton = document.getElementById('restartButton');
 const endTitle = document.getElementById('endTitle');
 const finalScoreElement = document.getElementById('finalScore');
+const finalTimeElement = document.getElementById('finalTime');
+const timerElement = document.getElementById('timer');
 
 const GAME_STATES = {
   START: 'start',
@@ -34,7 +36,9 @@ const statusStyles = {
   Below: { color: '#ef4444', text: 'Below' },
 };
 
-const BASE_BALL_SPEED = 10;
+const START_BALL_SPEED = 3;
+const BALL_SPEED_INCREMENT = 1;
+const BALL_SPEED_INCREASE_INTERVAL_MS = 15000;
 
 const paddle = {
   width: 140,
@@ -50,7 +54,7 @@ const ball = {
   radius: 8,
   x: canvas.width / 2,
   y: canvas.height - 60,
-  speed: BASE_BALL_SPEED,
+  speed: START_BALL_SPEED,
   dx: 0,
   dy: 0,
 };
@@ -59,11 +63,15 @@ let bricks = [];
 let gameState = GAME_STATES.START;
 let score = 0;
 let lives = 3;
+let currentBallSpeed = START_BALL_SPEED;
+let gameStartTime = null;
+let completedSpeedIntervals = 0;
+let lastElapsedSeconds = 0;
 
 function resetBall(upwards = true) {
   ball.x = paddle.x + paddle.width / 2;
   ball.y = paddle.y - ball.radius - 4;
-  ball.speed = BASE_BALL_SPEED;
+  ball.speed = currentBallSpeed;
 
   const angle = (Math.random() * Math.PI) / 3 + Math.PI / 6; // 30° → 90°
   const horizontalDirection = Math.random() < 0.5 ? -1 : 1;
@@ -83,7 +91,13 @@ function resetPaddle() {
 function resetGame() {
   score = 0;
   lives = 3;
+  currentBallSpeed = START_BALL_SPEED;
+  gameStartTime = null;
+  completedSpeedIntervals = 0;
   updateHud();
+  updateTimerDisplay(0);
+  lastElapsedSeconds = 0;
+  finalTimeElement.textContent = formatTime(0);
   resetPaddle();
   resetBall();
   bricks = createBricks();
@@ -234,6 +248,7 @@ function update() {
     return;
   }
 
+  updateTimer();
   movePaddle();
   moveBall();
   handleCollisions();
@@ -296,7 +311,6 @@ function handleCollisions() {
     ) {
       brick.destroyed = true;
       score += 50;
-      ball.speed = Math.min(ball.speed + 0.05, 9);
       updateHud();
 
       const overlapLeft = ball.x + ball.radius - brick.x;
@@ -333,6 +347,40 @@ function normalizeBallVelocity() {
   ball.dy = (ball.dy / magnitude) * ball.speed;
 }
 
+function increaseBallSpeed(amount) {
+  currentBallSpeed += amount;
+  ball.speed = currentBallSpeed;
+  normalizeBallVelocity();
+}
+
+function updateTimer() {
+  if (gameStartTime === null) {
+    return;
+  }
+
+  const elapsedMs = performance.now() - gameStartTime;
+  const elapsedSeconds = Math.floor(elapsedMs / 1000);
+  lastElapsedSeconds = elapsedSeconds;
+  updateTimerDisplay(elapsedSeconds);
+
+  const intervals = Math.floor(elapsedMs / BALL_SPEED_INCREASE_INTERVAL_MS);
+  if (intervals > completedSpeedIntervals) {
+    const increases = intervals - completedSpeedIntervals;
+    increaseBallSpeed(increases * BALL_SPEED_INCREMENT);
+    completedSpeedIntervals = intervals;
+  }
+}
+
+function updateTimerDisplay(totalSeconds) {
+  timerElement.textContent = formatTime(totalSeconds);
+}
+
+function formatTime(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
 function loseLife() {
   lives -= 1;
   updateHud();
@@ -353,11 +401,16 @@ function endGame(victory) {
   gameState = victory ? GAME_STATES.VICTORY : GAME_STATES.GAME_OVER;
   endTitle.textContent = victory ? 'Level Cleared!' : 'Out of Lives';
   finalScoreElement.textContent = score;
+  finalTimeElement.textContent = formatTime(lastElapsedSeconds);
   endScreen.classList.remove('overlay--hidden');
 }
 
 function startGame() {
   resetGame();
+  gameStartTime = performance.now();
+  completedSpeedIntervals = 0;
+  lastElapsedSeconds = 0;
+  updateTimerDisplay(0);
   gameState = GAME_STATES.PLAYING;
   startScreen.classList.add('overlay--hidden');
   endScreen.classList.add('overlay--hidden');
@@ -402,3 +455,4 @@ function gameLoop() {
 
 gameLoop();
 updateHud();
+updateTimerDisplay(0);
