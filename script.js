@@ -24,7 +24,7 @@ const brickSettings = {
   height: 24,
   padding: 5,
   topOffset: 90,
-  leftOffset: 60,
+  leftOffset: 138,
 };
 
 const statusStyles = {
@@ -373,13 +373,6 @@ function handleKeyUp(event) {
   }
 }
 
-function handleMouseMove(event) {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const x = (event.clientX - rect.left) * scaleX;
-  paddle.x = Math.max(0, Math.min(canvas.width - paddle.width, x - paddle.width / 2));
-}
-
 startButton.addEventListener('click', () => {
   startGame();
 });
@@ -390,7 +383,6 @@ restartButton.addEventListener('click', () => {
 
 window.addEventListener('keydown', handleKeyDown);
 window.addEventListener('keyup', handleKeyUp);
-canvas.addEventListener('mousemove', handleMouseMove);
 
 function gameLoop() {
   update();
