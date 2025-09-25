@@ -19,11 +19,11 @@ const GAME_STATES = {
 
 const brickSettings = {
   columns: 18,
-  rows: 12,
+  rows: 21,
   width: 40,
   height: 24,
   padding: 5,
-  topOffset: 90,
+  topOffset: 60,
   leftOffset: 138,
 };
 
@@ -112,14 +112,24 @@ function createBricks() {
 }
 
 function determineStatus(row, col) {
-  const diagonalBias = col - row;
-  if (diagonalBias <= -3) {
+  if (row === 0) {
     return 'Above';
   }
-  if (diagonalBias >= -2 && diagonalBias <= 1) {
+  if (row === brickSettings.rows - 1) {
+    return 'Below';
+  }
+
+  const normalizedRow = row - 1;
+  const offsetFromRight = brickSettings.columns - 1 - col;
+  const progression = normalizedRow - offsetFromRight;
+
+  if (progression < 0) {
+    return 'Above';
+  }
+  if (progression === 0) {
     return 'Expected';
   }
-  if (diagonalBias >= 2 && diagonalBias <= 4) {
+  if (progression === 1) {
     return 'Just Below';
   }
   return 'Below';
