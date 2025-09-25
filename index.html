@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Breakout Levels</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="hud">
+    <div class="hud__item">Score: <span id="score">0</span></div>
+    <div class="hud__item">Lives: <span id="lives">3</span></div>
+  </div>
+
+  <canvas id="gameCanvas" width="960" height="600" aria-label="Breakout style game canvas"></canvas>
+
+  <div id="startScreen" class="overlay">
+    <div class="overlay__content">
+      <h1>Breakout: Levels Edition</h1>
+      <p>Smash through the assessment levels before they smash your morale.</p>
+      <ul class="overlay__list">
+        <li>Move with your mouse or the ← → keys (A / D).</li>
+        <li>You have 3 lives to clear the grid.</li>
+        <li>Earn points for every outdated level you obliterate.</li>
+      </ul>
+      <button id="startButton">Start</button>
+    </div>
+  </div>
+
+  <div id="endScreen" class="overlay overlay--hidden">
+    <div class="overlay__content">
+      <h2 id="endTitle">Game Over</h2>
+      <p>Your score: <span id="finalScore">0</span></p>
+      <p class="overlay__hint">Press space or tap the button to try again.</p>
+      <button id="restartButton">Play Again</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
