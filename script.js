@@ -112,6 +112,12 @@ function createBricks() {
 }
 
 function determineStatus(row, col) {
+  if (row === 0) {
+    return 'Expected';
+  }
+  if (row === brickSettings.rows - 1) {
+    return 'Below';
+  }
   const diagonalBias = col - row;
   if (diagonalBias <= -3) {
     return 'Above';
