@@ -34,6 +34,74 @@ const statusStyles = {
   Below: { color: '#ef4444', text: 'Below' },
 };
 
+function buildRow(segments) {
+  return segments.flatMap(([count, status]) => Array(count).fill(status));
+}
+
+const statusLayout = [
+  buildRow([[18, 'Expected']]),
+  buildRow([
+    [4, 'Above'],
+    [10, 'Expected'],
+    [2, 'Just Below'],
+    [2, 'Below'],
+  ]),
+  buildRow([
+    [5, 'Above'],
+    [9, 'Expected'],
+    [2, 'Just Below'],
+    [2, 'Below'],
+  ]),
+  buildRow([
+    [6, 'Above'],
+    [7, 'Expected'],
+    [2, 'Just Below'],
+    [3, 'Below'],
+  ]),
+  buildRow([
+    [7, 'Above'],
+    [5, 'Expected'],
+    [2, 'Just Below'],
+    [4, 'Below'],
+  ]),
+  buildRow([
+    [8, 'Above'],
+    [3, 'Expected'],
+    [2, 'Just Below'],
+    [5, 'Below'],
+  ]),
+  buildRow([
+    [8, 'Above'],
+    [2, 'Expected'],
+    [2, 'Just Below'],
+    [6, 'Below'],
+  ]),
+  buildRow([
+    [7, 'Above'],
+    [2, 'Expected'],
+    [2, 'Just Below'],
+    [7, 'Below'],
+  ]),
+  buildRow([
+    [6, 'Above'],
+    [2, 'Expected'],
+    [2, 'Just Below'],
+    [8, 'Below'],
+  ]),
+  buildRow([
+    [5, 'Above'],
+    [2, 'Expected'],
+    [2, 'Just Below'],
+    [9, 'Below'],
+  ]),
+  buildRow([
+    [4, 'Above'],
+    [2, 'Just Below'],
+    [12, 'Below'],
+  ]),
+  buildRow([[18, 'Below']]),
+];
+
 const BASE_BALL_SPEED = 10;
 
 const paddle = {
@@ -112,21 +180,9 @@ function createBricks() {
 }
 
 function determineStatus(row, col) {
-  if (row === 0) {
-    return 'Expected';
-  }
-  if (row === brickSettings.rows - 1) {
-    return 'Below';
-  }
-  const diagonalBias = col - row;
-  if (diagonalBias <= -3) {
-    return 'Above';
-  }
-  if (diagonalBias >= -2 && diagonalBias <= 1) {
-    return 'Expected';
-  }
-  if (diagonalBias >= 2 && diagonalBias <= 4) {
-    return 'Just Below';
+  const layoutRow = statusLayout[row];
+  if (layoutRow && layoutRow[col]) {
+    return layoutRow[col];
   }
   return 'Below';
 }
