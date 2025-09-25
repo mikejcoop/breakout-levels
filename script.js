@@ -899,7 +899,7 @@ function initializeInstantDB() {
     return instantDbInitPromise;
   }
 
-  instantDbInitPromise = (async () => {
+  const promise = (async () => {
     if (!leaderboardListElement) {
       return null;
     }
@@ -908,23 +908,36 @@ function initializeInstantDB() {
 
     try {
       const module = await importInstantDB();
-      if (!module) {
+      if (!module || typeof module.init !== 'function') {
+        console.warn('InstantDB module missing init function.');
         showLeaderboardStatus('Leaderboard unavailable.');
         return null;
       }
 
-      instantDbClient = module.init({ appId: INSTANTDB_APP_ID });
+      const client = module.init({ appId: INSTANTDB_APP_ID });
+      const hasQuery = typeof client?.query === 'function';
+      const hasTransact = typeof client?.transact === 'function';
+
+      if (!hasQuery || !hasTransact) {
+        console.warn('InstantDB client missing expected methods.');
+        showLeaderboardStatus('Leaderboard unavailable.');
+        return null;
+      }
+
+      instantDbClient = client;
       instantDbTx = instantDbClient?.tx ?? null;
       await refreshLeaderboard();
       return instantDbClient;
     } catch (error) {
       console.error('InstantDB initialization failed', error);
-      showLeaderboardStatus('Leaderboard unavailable.');
+      showLeaderboardStatus('Unable to load leaderboard.');
       return null;
     }
   })();
 
-  instantDbInitPromise.then(
+  instantDbInitPromise = promise;
+
+  promise.then(
     (client) => {
       if (!client) {
         instantDbInitPromise = null;
@@ -935,8 +948,9 @@ function initializeInstantDB() {
     }
   );
 
-  return instantDbInitPromise;
+  return promise;
 }
+
 
 async function submitLeaderboardEntry({ victory }) {
   if (!playerName) {
