@@ -50,15 +50,20 @@ const paddle = {
   movingRight: false,
 };
 
-const ball = {
-  radius: 8,
-  x: canvas.width / 2,
-  y: canvas.height - 60,
-  speed: START_BALL_SPEED,
-  dx: 0,
-  dy: 0,
+const BASE_BALL_RADIUS = 8;
+
+const POWER_UP_TYPES = {
+  BIG_BALL: 'big',
+  MULTI_BALL: 'multi',
+  PIERCING_BALL: 'pierce',
 };
 
+const POWER_UP_DROP_INTERVAL_MS = 20000;
+const POWER_UP_DURATION_MS = 10000;
+const POWER_UP_FALL_SPEED = 3;
+const POWER_UP_SIZE = 24;
+
+let balls = [];
 let bricks = [];
 let gameState = GAME_STATES.START;
 let score = 0;
@@ -67,19 +72,49 @@ let currentBallSpeed = START_BALL_SPEED;
 let gameStartTime = null;
 let completedSpeedIntervals = 0;
 let lastElapsedSeconds = 0;
+let lastElapsedMs = 0;
+let ballRadiusMultiplier = 1;
+let powerUps = [];
+let lastPowerUpDropMs = 0;
+let activePowerUp = null;
+let piercingActive = false;
 
 function resetBall(upwards = true) {
-  ball.x = paddle.x + paddle.width / 2;
-  ball.y = paddle.y - ball.radius - 4;
-  ball.speed = currentBallSpeed;
+  balls = [createBall({ upwards })];
+}
 
-  const angle = (Math.random() * Math.PI) / 3 + Math.PI / 6; // 30° → 90°
-  const horizontalDirection = Math.random() < 0.5 ? -1 : 1;
-  const horizontal = Math.cos(angle) * horizontalDirection;
-  const vertical = Math.sin(angle);
+function createBall({
+  upwards = true,
+  position = null,
+  angle = null,
+} = {}) {
+  const startX = position ? position.x : paddle.x + paddle.width / 2;
+  const startY = position ? position.y : paddle.y - BASE_BALL_RADIUS - 4;
+  const speed = currentBallSpeed;
 
-  ball.dx = ball.speed * horizontal;
-  ball.dy = ball.speed * (upwards ? -vertical : vertical);
+  let dx;
+  let dy;
+
+  if (angle !== null) {
+    dx = speed * Math.cos(angle);
+    dy = speed * Math.sin(angle);
+  } else {
+    const randomAngle = (Math.random() * Math.PI) / 3 + Math.PI / 6; // 30° → 90°
+    const horizontalDirection = Math.random() < 0.5 ? -1 : 1;
+    const horizontal = Math.cos(randomAngle) * horizontalDirection;
+    const vertical = Math.sin(randomAngle);
+    dx = speed * horizontal;
+    dy = speed * (upwards ? -vertical : vertical);
+  }
+
+  return {
+    x: startX,
+    y: startY,
+    dx,
+    dy,
+    speed,
+    radius: BASE_BALL_RADIUS * ballRadiusMultiplier,
+  };
 }
 
 function resetPaddle() {
@@ -97,6 +132,12 @@ function resetGame() {
   updateHud();
   updateTimerDisplay(0);
   lastElapsedSeconds = 0;
+  lastElapsedMs = 0;
+  ballRadiusMultiplier = 1;
+  powerUps = [];
+  lastPowerUpDropMs = 0;
+  activePowerUp = null;
+  piercingActive = false;
   finalTimeElement.textContent = formatTime(0);
   resetPaddle();
   resetBall();
@@ -165,21 +206,62 @@ function drawPaddle() {
   ctx.shadowBlur = 0;
 }
 
-function drawBall() {
-  const gradient = ctx.createRadialGradient(
-    ball.x,
-    ball.y,
-    ball.radius * 0.3,
-    ball.x,
-    ball.y,
-    ball.radius
-  );
-  gradient.addColorStop(0, '#f8fafc');
-  gradient.addColorStop(1, '#38bdf8');
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-  ctx.fill();
+function drawBalls() {
+  balls.forEach((ball) => {
+    const gradient = ctx.createRadialGradient(
+      ball.x,
+      ball.y,
+      ball.radius * 0.3,
+      ball.x,
+      ball.y,
+      ball.radius
+    );
+    gradient.addColorStop(0, '#f8fafc');
+    gradient.addColorStop(1, '#38bdf8');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawPowerUps() {
+  const colors = {
+    [POWER_UP_TYPES.BIG_BALL]: '#f97316',
+    [POWER_UP_TYPES.MULTI_BALL]: '#a855f7',
+    [POWER_UP_TYPES.PIERCING_BALL]: '#22c55e',
+  };
+
+  const labels = {
+    [POWER_UP_TYPES.BIG_BALL]: 'B',
+    [POWER_UP_TYPES.MULTI_BALL]: 'M',
+    [POWER_UP_TYPES.PIERCING_BALL]: 'P',
+  };
+
+  powerUps.forEach((powerUp) => {
+    ctx.fillStyle = colors[powerUp.type];
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.65)';
+    ctx.lineWidth = 2;
+    roundedRect(
+      ctx,
+      powerUp.x,
+      powerUp.y,
+      POWER_UP_SIZE,
+      POWER_UP_SIZE,
+      6
+    );
+    ctx.stroke();
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 14px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(
+      labels[powerUp.type],
+      powerUp.x + POWER_UP_SIZE / 2,
+      powerUp.y + POWER_UP_SIZE / 2
+    );
+  });
 }
 
 function drawBricks() {
@@ -228,8 +310,9 @@ function roundedRect(context, x, y, width, height, radius) {
 function draw() {
   drawBackground();
   drawBricks();
+  drawPowerUps();
   drawPaddle();
-  drawBall();
+  drawBalls();
   drawStatusBanner();
 }
 
@@ -249,9 +332,12 @@ function update() {
   }
 
   updateTimer();
+  maybeSpawnPowerUp();
+  updatePowerUps();
   movePaddle();
-  moveBall();
+  moveBalls();
   handleCollisions();
+  checkPowerUpExpiration();
 }
 
 function movePaddle() {
@@ -265,68 +351,88 @@ function movePaddle() {
   paddle.x = Math.max(0, Math.min(canvas.width - paddle.width, paddle.x));
 }
 
-function moveBall() {
-  ball.x += ball.dx;
-  ball.y += ball.dy;
+function moveBalls() {
+  for (let index = balls.length - 1; index >= 0; index -= 1) {
+    const ball = balls[index];
+    ball.x += ball.dx;
+    ball.y += ball.dy;
 
-  if (ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) {
-    ball.dx *= -1;
+    if (ball.x + ball.radius > canvas.width) {
+      ball.x = canvas.width - ball.radius;
+      ball.dx *= -1;
+    } else if (ball.x - ball.radius < 0) {
+      ball.x = ball.radius;
+      ball.dx *= -1;
+    }
+
+    if (ball.y - ball.radius < 0) {
+      ball.y = ball.radius;
+      ball.dy *= -1;
+    }
+
+    if (ball.y + ball.radius > canvas.height) {
+      balls.splice(index, 1);
+    }
   }
 
-  if (ball.y - ball.radius < 0) {
-    ball.dy *= -1;
-  }
-
-  if (ball.y + ball.radius > canvas.height) {
+  if (balls.length === 0) {
     loseLife();
+    return;
   }
 }
 
 function handleCollisions() {
-  // Paddle collision
-  if (
-    ball.y + ball.radius >= paddle.y &&
-    ball.y + ball.radius <= paddle.y + paddle.height &&
-    ball.x >= paddle.x &&
-    ball.x <= paddle.x + paddle.width &&
-    ball.dy > 0
-  ) {
-    const hitPoint = (ball.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2);
-    const clamped = Math.max(-1, Math.min(1, hitPoint));
-    const bounceAngle = (Math.PI / 3) * clamped; // ±60° from vertical
-
-    ball.dx = ball.speed * Math.sin(bounceAngle);
-    ball.dy = -ball.speed * Math.cos(bounceAngle);
-  }
-
-  // Brick collisions
-  bricks.forEach((brick) => {
-    if (brick.destroyed) return;
-
+  balls.forEach((ball) => {
     if (
-      ball.x + ball.radius > brick.x &&
-      ball.x - ball.radius < brick.x + brickSettings.width &&
-      ball.y + ball.radius > brick.y &&
-      ball.y - ball.radius < brick.y + brickSettings.height
+      ball.dy > 0 &&
+      ball.y + ball.radius >= paddle.y &&
+      ball.y - ball.radius <= paddle.y + paddle.height &&
+      ball.x + ball.radius >= paddle.x &&
+      ball.x - ball.radius <= paddle.x + paddle.width
     ) {
-      brick.destroyed = true;
-      score += 50;
-      updateHud();
+      const hitPoint = (ball.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2);
+      const clamped = Math.max(-1, Math.min(1, hitPoint));
+      const bounceAngle = (Math.PI / 3) * clamped; // ±60° from vertical
 
-      const overlapLeft = ball.x + ball.radius - brick.x;
-      const overlapRight = brick.x + brickSettings.width - (ball.x - ball.radius);
-      const overlapTop = ball.y + ball.radius - brick.y;
-      const overlapBottom = brick.y + brickSettings.height - (ball.y - ball.radius);
-      const minOverlapX = Math.min(overlapLeft, overlapRight);
-      const minOverlapY = Math.min(overlapTop, overlapBottom);
+      ball.dx = ball.speed * Math.sin(bounceAngle);
+      ball.dy = -ball.speed * Math.cos(bounceAngle);
+      ball.y = paddle.y - ball.radius - 1;
+    }
 
-      if (minOverlapX < minOverlapY) {
-        ball.dx = -ball.dx;
-      } else {
-        ball.dy = -ball.dy;
+    for (let i = 0; i < bricks.length; i += 1) {
+      const brick = bricks[i];
+      if (brick.destroyed) {
+        continue;
       }
 
-      normalizeBallVelocity();
+      if (
+        ball.x + ball.radius > brick.x &&
+        ball.x - ball.radius < brick.x + brickSettings.width &&
+        ball.y + ball.radius > brick.y &&
+        ball.y - ball.radius < brick.y + brickSettings.height
+      ) {
+        brick.destroyed = true;
+        score += 50;
+        updateHud();
+
+        if (!piercingActive) {
+          const overlapLeft = ball.x + ball.radius - brick.x;
+          const overlapRight = brick.x + brickSettings.width - (ball.x - ball.radius);
+          const overlapTop = ball.y + ball.radius - brick.y;
+          const overlapBottom = brick.y + brickSettings.height - (ball.y - ball.radius);
+          const minOverlapX = Math.min(overlapLeft, overlapRight);
+          const minOverlapY = Math.min(overlapTop, overlapBottom);
+
+          if (minOverlapX < minOverlapY) {
+            ball.dx = -ball.dx;
+          } else {
+            ball.dy = -ball.dy;
+          }
+
+          normalizeBallVelocity(ball);
+          break;
+        }
+      }
     }
   });
 
@@ -335,7 +441,7 @@ function handleCollisions() {
   }
 }
 
-function normalizeBallVelocity() {
+function normalizeBallVelocity(ball) {
   const magnitude = Math.hypot(ball.dx, ball.dy);
   if (magnitude === 0) {
     ball.dx = ball.speed;
@@ -349,8 +455,146 @@ function normalizeBallVelocity() {
 
 function increaseBallSpeed(amount) {
   currentBallSpeed += amount;
-  ball.speed = currentBallSpeed;
-  normalizeBallVelocity();
+  balls.forEach((ball) => {
+    ball.speed = currentBallSpeed;
+    normalizeBallVelocity(ball);
+  });
+}
+
+function maybeSpawnPowerUp() {
+  if (gameStartTime === null) {
+    return;
+  }
+
+  if (lastElapsedMs - lastPowerUpDropMs >= POWER_UP_DROP_INTERVAL_MS) {
+    powerUps.push(createPowerUp());
+    lastPowerUpDropMs = lastElapsedMs;
+  }
+}
+
+function createPowerUp() {
+  const types = Object.values(POWER_UP_TYPES);
+  const type = types[Math.floor(Math.random() * types.length)];
+
+  return {
+    type,
+    x: Math.random() * (canvas.width - POWER_UP_SIZE),
+    y: brickSettings.topOffset,
+    speed: POWER_UP_FALL_SPEED,
+  };
+}
+
+function updatePowerUps() {
+  for (let i = powerUps.length - 1; i >= 0; i -= 1) {
+    const powerUp = powerUps[i];
+    powerUp.y += powerUp.speed;
+
+    if (powerUp.y > canvas.height) {
+      powerUps.splice(i, 1);
+      continue;
+    }
+
+    const overlapsPaddle =
+      powerUp.y + POWER_UP_SIZE >= paddle.y &&
+      powerUp.y <= paddle.y + paddle.height &&
+      powerUp.x + POWER_UP_SIZE >= paddle.x &&
+      powerUp.x <= paddle.x + paddle.width;
+
+    if (overlapsPaddle) {
+      activatePowerUp(powerUp.type);
+      powerUps.splice(i, 1);
+    }
+  }
+}
+
+function checkPowerUpExpiration() {
+  if (!activePowerUp) {
+    return;
+  }
+
+  if (performance.now() >= activePowerUp.expiresAt) {
+    deactivateCurrentPowerUp();
+  }
+}
+
+function activatePowerUp(type) {
+  if (activePowerUp) {
+    deactivateCurrentPowerUp();
+  }
+
+  activePowerUp = {
+    type,
+    expiresAt: performance.now() + POWER_UP_DURATION_MS,
+  };
+
+  switch (type) {
+    case POWER_UP_TYPES.BIG_BALL:
+      ballRadiusMultiplier = 1.75;
+      updateBallRadii();
+      break;
+    case POWER_UP_TYPES.MULTI_BALL:
+      spawnAdditionalBalls();
+      break;
+    case POWER_UP_TYPES.PIERCING_BALL:
+      piercingActive = true;
+      break;
+    default:
+      break;
+  }
+}
+
+function deactivateCurrentPowerUp() {
+  if (!activePowerUp) {
+    ballRadiusMultiplier = 1;
+    updateBallRadii();
+    piercingActive = false;
+    return;
+  }
+
+  if (activePowerUp.type === POWER_UP_TYPES.MULTI_BALL) {
+    if (balls.length > 0) {
+      let keeperIndex = 0;
+      for (let i = 1; i < balls.length; i += 1) {
+        if (balls[i].y > balls[keeperIndex].y) {
+          keeperIndex = i;
+        }
+      }
+      const keeperBall = balls[keeperIndex];
+      balls = [keeperBall];
+    }
+  }
+
+  ballRadiusMultiplier = 1;
+  updateBallRadii();
+  piercingActive = false;
+  activePowerUp = null;
+}
+
+function spawnAdditionalBalls() {
+  if (balls.length === 0) {
+    balls.push(createBall());
+    return;
+  }
+
+  const referenceBall = balls[0];
+  const baseAngle = Math.atan2(referenceBall.dy, referenceBall.dx);
+  const offsets = [-0.3, 0.3];
+
+  offsets.forEach((offset) => {
+    const angle = baseAngle + offset;
+    balls.push(
+      createBall({
+        position: { x: referenceBall.x, y: referenceBall.y },
+        angle,
+      })
+    );
+  });
+}
+
+function updateBallRadii() {
+  balls.forEach((ball) => {
+    ball.radius = BASE_BALL_RADIUS * ballRadiusMultiplier;
+  });
 }
 
 function updateTimer() {
@@ -361,6 +605,7 @@ function updateTimer() {
   const elapsedMs = performance.now() - gameStartTime;
   const elapsedSeconds = Math.floor(elapsedMs / 1000);
   lastElapsedSeconds = elapsedSeconds;
+  lastElapsedMs = elapsedMs;
   updateTimerDisplay(elapsedSeconds);
 
   const intervals = Math.floor(elapsedMs / BALL_SPEED_INCREASE_INTERVAL_MS);
@@ -384,6 +629,9 @@ function formatTime(totalSeconds) {
 function loseLife() {
   lives -= 1;
   updateHud();
+  deactivateCurrentPowerUp();
+  powerUps = [];
+  lastPowerUpDropMs = lastElapsedMs;
   if (lives <= 0) {
     endGame(false);
   } else {
@@ -398,6 +646,8 @@ function updateHud() {
 }
 
 function endGame(victory) {
+  deactivateCurrentPowerUp();
+  powerUps = [];
   gameState = victory ? GAME_STATES.VICTORY : GAME_STATES.GAME_OVER;
   endTitle.textContent = victory ? 'Level Cleared!' : 'Out of Lives';
   finalScoreElement.textContent = score;
