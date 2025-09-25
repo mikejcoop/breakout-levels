@@ -29,6 +29,18 @@
         <li>You have 3 lives to clear the grid.</li>
         <li>Earn points for every outdated level you obliterate.</li>
       </ul>
+      <label class="overlay__label" for="playerName">Enter your name to join the leaderboard</label>
+      <input
+        id="playerName"
+        class="overlay__input"
+        type="text"
+        name="playerName"
+        maxlength="32"
+        placeholder="Your name"
+        autocomplete="off"
+        required
+      />
+      <p id="nameError" class="overlay__error" aria-live="polite"></p>
       <button id="startButton">Start</button>
     </div>
   </div>
@@ -40,9 +52,14 @@
       <p>Your time: <span id="finalTime">0:00</span></p>
       <p class="overlay__hint">Press space or tap the button to try again.</p>
       <button id="restartButton">Play Again</button>
+      <div class="leaderboard" aria-live="polite">
+        <h3 class="leaderboard__title">Leaderboard</h3>
+        <p id="leaderboardStatus" class="leaderboard__status"></p>
+        <ol id="leaderboardList" class="leaderboard__list"></ol>
+      </div>
     </div>
   </div>
 
-  <script src="script.js"></script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>

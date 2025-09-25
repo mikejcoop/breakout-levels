@@ -11,6 +11,21 @@ const endTitle = document.getElementById('endTitle');
 const finalScoreElement = document.getElementById('finalScore');
 const finalTimeElement = document.getElementById('finalTime');
 const timerElement = document.getElementById('timer');
+const nameInput = document.getElementById('playerName');
+const nameErrorElement = document.getElementById('nameError');
+const leaderboardListElement = document.getElementById('leaderboardList');
+const leaderboardStatusElement = document.getElementById('leaderboardStatus');
+
+const INSTANTDB_APP_ID = 'b2811543-8f1e-4430-8b48-e9c3b8b6599e';
+const LEADERBOARD_LIMIT = 20;
+
+let playerName = '';
+let instantDbClient = null;
+let instantDbTx = null;
+let instantDbInitPromise = null;
+let lastSubmittedEntryId = null;
+let lastSubmittedScore = null;
+let lastSubmittedTime = null;
 
 const GAME_STATES = {
   START: 'start',
@@ -18,6 +33,78 @@ const GAME_STATES = {
   VICTORY: 'victory',
   GAME_OVER: 'gameover',
 };
+
+function isNameValid() {
+  return Boolean(nameInput && nameInput.value.trim().length);
+}
+
+function updateStartButtonState() {
+  if (startButton) {
+    startButton.disabled = !isNameValid();
+  }
+}
+
+function handleNameInput() {
+  if (nameErrorElement) {
+    nameErrorElement.textContent = '';
+  }
+  updateStartButtonState();
+}
+
+function ensurePlayerName() {
+  if (playerName) {
+    return true;
+  }
+
+  if (nameInput && nameInput.value.trim().length) {
+    const trimmed = nameInput.value.trim().slice(0, 32);
+    if (playerName !== trimmed) {
+      lastSubmittedEntryId = null;
+      lastSubmittedScore = null;
+      lastSubmittedTime = null;
+    }
+    playerName = trimmed;
+    nameInput.value = playerName;
+    return true;
+  }
+
+  if (nameErrorElement) {
+    nameErrorElement.textContent = 'Please enter your name to start playing.';
+  }
+  if (nameInput) {
+    nameInput.focus();
+  }
+  if (startScreen) {
+    startScreen.classList.remove('overlay--hidden');
+  }
+  gameState = GAME_STATES.START;
+  return false;
+}
+
+function attemptInitialStart() {
+  if (!isNameValid()) {
+    if (nameErrorElement) {
+      nameErrorElement.textContent = 'Please enter your name to start playing.';
+    }
+    if (nameInput) {
+      nameInput.focus();
+    }
+    return;
+  }
+
+  const trimmed = nameInput.value.trim().slice(0, 32);
+  if (playerName !== trimmed) {
+    lastSubmittedEntryId = null;
+    lastSubmittedScore = null;
+    lastSubmittedTime = null;
+  }
+  playerName = trimmed;
+  nameInput.value = playerName;
+  if (nameErrorElement) {
+    nameErrorElement.textContent = '';
+  }
+  startGame();
+}
 
 const brickSettings = {
   columns: 18,
@@ -626,6 +713,286 @@ function formatTime(totalSeconds) {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+function generateLocalId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `lb_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+}
+
+function showLeaderboardStatus(message) {
+  if (leaderboardStatusElement) {
+    leaderboardStatusElement.textContent = message ?? '';
+  }
+}
+
+function renderLeaderboard(entries) {
+  if (!leaderboardListElement) {
+    return;
+  }
+
+  leaderboardListElement.innerHTML = '';
+
+  if (!entries || entries.length === 0) {
+    showLeaderboardStatus('No runs recorded yet. Be the first to claim the top spot!');
+    return;
+  }
+
+  showLeaderboardStatus('');
+
+  const fragment = document.createDocumentFragment();
+  const normalizedPlayerName = playerName ? playerName.toLowerCase() : null;
+  const normalizedScore = lastSubmittedScore;
+  const normalizedTime = lastSubmittedTime;
+
+  entries.slice(0, LEADERBOARD_LIMIT).forEach((entry, index) => {
+    const listItem = document.createElement('li');
+    listItem.className = 'leaderboard__entry';
+
+    const entryId =
+      entry?.id ??
+      entry?.leaderboard_id ??
+      entry?.__id ??
+      entry?.$id ??
+      entry?.uuid;
+    let isCurrentPlayerEntry = false;
+    if (entryId && lastSubmittedEntryId && entryId === lastSubmittedEntryId) {
+      isCurrentPlayerEntry = true;
+    } else if (normalizedPlayerName) {
+      const entryName = (entry?.name ?? '').toString().toLowerCase();
+      const entryScore = Number.parseInt(entry?.score, 10);
+      const entryTime = Number.parseInt(entry?.timeSeconds ?? entry?.time, 10);
+      if (
+        entryName === normalizedPlayerName &&
+        Number.isFinite(entryScore) &&
+        entryScore === normalizedScore &&
+        Number.isFinite(entryTime) &&
+        entryTime === normalizedTime
+      ) {
+        isCurrentPlayerEntry = true;
+      }
+    }
+
+    if (isCurrentPlayerEntry) {
+      listItem.classList.add('leaderboard__entry--current');
+    }
+
+    const rankSpan = document.createElement('span');
+    rankSpan.className = 'leaderboard__rank';
+    rankSpan.textContent = `${index + 1}.`;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'leaderboard__name';
+    nameSpan.textContent = entry?.name ? String(entry.name) : 'Anonymous';
+
+    const scoreSpan = document.createElement('span');
+    scoreSpan.className = 'leaderboard__score';
+    const displayScore = Number.isFinite(Number(entry?.score))
+      ? Number(entry.score)
+      : Number.parseInt(entry?.score, 10) || 0;
+    scoreSpan.textContent = `${displayScore} pts`;
+
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'leaderboard__time';
+    const rawTime = entry?.timeSeconds ?? entry?.time ?? entry?.durationSeconds;
+    const parsedTime = Number.parseInt(rawTime, 10);
+    timeSpan.textContent = Number.isFinite(parsedTime)
+      ? formatTime(Math.max(parsedTime, 0))
+      : typeof rawTime === 'string'
+      ? rawTime
+      : '—';
+
+    listItem.append(rankSpan, nameSpan, scoreSpan, timeSpan);
+    fragment.appendChild(listItem);
+  });
+
+  leaderboardListElement.appendChild(fragment);
+}
+
+async function refreshLeaderboard() {
+  if (!instantDbClient) {
+    return;
+  }
+
+  try {
+    showLeaderboardStatus('Loading leaderboard…');
+    const query = {
+      leaderboard: {
+        $: {
+          limit: LEADERBOARD_LIMIT,
+          orderBy: [
+            { score: 'desc' },
+            { timeSeconds: 'asc' },
+            { createdAt: 'asc' },
+          ],
+        },
+      },
+    };
+    const result = await instantDbClient.query(query);
+    let entries =
+      result?.data?.leaderboard ??
+      result?.leaderboard ??
+      (Array.isArray(result) ? result : []);
+
+    if (entries && !Array.isArray(entries) && typeof entries === 'object') {
+      entries = Object.values(entries);
+    }
+
+    if (Array.isArray(entries)) {
+      entries.sort((a, b) => {
+        const scoreA = Number(a?.score) || 0;
+        const scoreB = Number(b?.score) || 0;
+        if (scoreA !== scoreB) {
+          return scoreB - scoreA;
+        }
+
+        const timeA = Number(a?.timeSeconds ?? a?.time ?? a?.durationSeconds);
+        const timeB = Number(b?.timeSeconds ?? b?.time ?? b?.durationSeconds);
+        const timeAValid = Number.isFinite(timeA);
+        const timeBValid = Number.isFinite(timeB);
+
+        if (timeAValid && timeBValid && timeA !== timeB) {
+          return timeA - timeB;
+        }
+        if (timeAValid && !timeBValid) {
+          return -1;
+        }
+        if (!timeAValid && timeBValid) {
+          return 1;
+        }
+
+        const createdAtA = new Date(a?.createdAt ?? a?.created_at ?? 0).getTime();
+        const createdAtB = new Date(b?.createdAt ?? b?.created_at ?? 0).getTime();
+        return createdAtA - createdAtB;
+      });
+    }
+
+    renderLeaderboard(entries);
+  } catch (error) {
+    console.error('Failed to load leaderboard', error);
+    showLeaderboardStatus('Unable to load leaderboard.');
+  }
+}
+
+async function importInstantDB() {
+  const sources = [
+    'https://cdn.instantdb.com/js/latest/instantdb.js',
+    'https://esm.sh/@instantdb/core@latest',
+  ];
+
+  for (const url of sources) {
+    try {
+      const module = await import(/* @vite-ignore */ url);
+      if (module && typeof module.init === 'function') {
+        return module;
+      }
+    } catch (error) {
+      console.warn('InstantDB source failed', url, error);
+    }
+  }
+
+  return null;
+}
+
+function initializeInstantDB() {
+  if (instantDbInitPromise) {
+    return instantDbInitPromise;
+  }
+
+  instantDbInitPromise = (async () => {
+    if (!leaderboardListElement) {
+      return null;
+    }
+
+    showLeaderboardStatus('Connecting to leaderboard…');
+
+    try {
+      const module = await importInstantDB();
+      if (!module) {
+        showLeaderboardStatus('Leaderboard unavailable.');
+        return null;
+      }
+
+      instantDbClient = module.init({ appId: INSTANTDB_APP_ID });
+      instantDbTx = instantDbClient?.tx ?? null;
+      await refreshLeaderboard();
+      return instantDbClient;
+    } catch (error) {
+      console.error('InstantDB initialization failed', error);
+      showLeaderboardStatus('Leaderboard unavailable.');
+      return null;
+    }
+  })();
+
+  instantDbInitPromise.then(
+    (client) => {
+      if (!client) {
+        instantDbInitPromise = null;
+      }
+    },
+    () => {
+      instantDbInitPromise = null;
+    }
+  );
+
+  return instantDbInitPromise;
+}
+
+async function submitLeaderboardEntry({ victory }) {
+  if (!playerName) {
+    return;
+  }
+
+  const client = await initializeInstantDB();
+  if (!client || typeof client.transact !== 'function') {
+    return;
+  }
+
+  const entryId = typeof client.id === 'function' ? client.id() : generateLocalId();
+  const createdAt = typeof client.now === 'function' ? client.now() : new Date().toISOString();
+  const numericScore = Number(score);
+  const numericTime = Number(lastElapsedSeconds);
+  const entryPayload = {
+    id: entryId,
+    name: playerName,
+    score: Number.isFinite(numericScore) ? numericScore : 0,
+    timeSeconds: Number.isFinite(numericTime) ? Math.max(numericTime, 0) : 0,
+    victory: Boolean(victory),
+    createdAt,
+  };
+
+  let operations;
+
+  if (instantDbTx && instantDbTx.leaderboard) {
+    try {
+      operations = [instantDbTx.leaderboard[entryId].update(entryPayload)];
+    } catch (txError) {
+      console.warn('InstantDB tx helper failed, using fallback mutation', txError);
+    }
+  }
+
+  if (!operations) {
+    operations = [
+      {
+        leaderboard: {
+          [entryId]: entryPayload,
+        },
+      },
+    ];
+  }
+
+  try {
+    await client.transact(operations);
+    lastSubmittedEntryId = entryId;
+    lastSubmittedScore = entryPayload.score;
+    lastSubmittedTime = entryPayload.timeSeconds;
+    await refreshLeaderboard();
+  } catch (error) {
+    console.error('Failed to submit leaderboard entry', error);
+    showLeaderboardStatus('Unable to update the leaderboard right now.');
+  }
+}
+
 function loseLife() {
   lives -= 1;
   updateHud();
@@ -653,9 +1020,19 @@ function endGame(victory) {
   finalScoreElement.textContent = score;
   finalTimeElement.textContent = formatTime(lastElapsedSeconds);
   endScreen.classList.remove('overlay--hidden');
+  initializeInstantDB();
+  void submitLeaderboardEntry({ victory });
 }
 
 function startGame() {
+  if (!ensurePlayerName()) {
+    return;
+  }
+
+  if (nameErrorElement) {
+    nameErrorElement.textContent = '';
+  }
+
   resetGame();
   gameStartTime = performance.now();
   completedSpeedIntervals = 0;
@@ -671,10 +1048,13 @@ function handleKeyDown(event) {
     paddle.movingLeft = true;
   } else if (event.key === 'ArrowRight' || event.key === 'd') {
     paddle.movingRight = true;
-  } else if (event.key === ' ' && gameState === GAME_STATES.START) {
-    startGame();
-  } else if (event.key === ' ' && gameState !== GAME_STATES.PLAYING) {
-    startGame();
+  } else if (event.key === ' ') {
+    event.preventDefault();
+    if (gameState === GAME_STATES.START) {
+      attemptInitialStart();
+    } else if (gameState !== GAME_STATES.PLAYING) {
+      startGame();
+    }
   }
 }
 
@@ -686,13 +1066,25 @@ function handleKeyUp(event) {
   }
 }
 
-startButton.addEventListener('click', () => {
-  startGame();
-});
+if (nameInput) {
+  nameInput.addEventListener('input', handleNameInput);
+  nameInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      attemptInitialStart();
+    }
+  });
+}
 
-restartButton.addEventListener('click', () => {
-  startGame();
-});
+if (startButton) {
+  startButton.addEventListener('click', attemptInitialStart);
+}
+
+if (restartButton) {
+  restartButton.addEventListener('click', () => {
+    startGame();
+  });
+}
 
 window.addEventListener('keydown', handleKeyDown);
 window.addEventListener('keyup', handleKeyUp);
@@ -702,6 +1094,9 @@ function gameLoop() {
   draw();
   requestAnimationFrame(gameLoop);
 }
+
+initializeInstantDB();
+updateStartButtonState();
 
 gameLoop();
 updateHud();
