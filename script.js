@@ -800,11 +800,7 @@ async function refreshLeaderboard() {
   try {
     showLeaderboardStatus("Loading leaderboard…");
     const query = {
-      leaderboard: {
-        $: {
-          limit: LEADERBOARD_LIMIT,
-        },
-      },
+      leaderboard: {},
     };
     const result = await instantDbClient.queryOnce(query);
     let entries =
