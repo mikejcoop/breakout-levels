@@ -31,7 +31,7 @@ canvas {
 }
 
 .hud {
-  width: 960px;
+  width: 1080px;
   max-width: 100%;
   display: flex;
   justify-content: space-between;
