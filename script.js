@@ -9,6 +9,7 @@ const startButton = document.getElementById('startButton');
 const restartButton = document.getElementById('restartButton');
 const endTitle = document.getElementById('endTitle');
 const finalScoreElement = document.getElementById('finalScore');
+const finalTimeElement = document.getElementById('finalTime');
 const timerElement = document.getElementById('timer');
 
 const GAME_STATES = {
@@ -37,7 +38,7 @@ const statusStyles = {
 
 const START_BALL_SPEED = 3;
 const BALL_SPEED_INCREMENT = 1;
-const BALL_SPEED_INCREASE_INTERVAL_MS = 20000;
+const BALL_SPEED_INCREASE_INTERVAL_MS = 15000;
 
 const paddle = {
   width: 140,
@@ -65,6 +66,7 @@ let lives = 3;
 let currentBallSpeed = START_BALL_SPEED;
 let gameStartTime = null;
 let completedSpeedIntervals = 0;
+let lastElapsedSeconds = 0;
 
 function resetBall(upwards = true) {
   ball.x = paddle.x + paddle.width / 2;
@@ -94,6 +96,8 @@ function resetGame() {
   completedSpeedIntervals = 0;
   updateHud();
   updateTimerDisplay(0);
+  lastElapsedSeconds = 0;
+  finalTimeElement.textContent = formatTime(0);
   resetPaddle();
   resetBall();
   bricks = createBricks();
@@ -356,6 +360,7 @@ function updateTimer() {
 
   const elapsedMs = performance.now() - gameStartTime;
   const elapsedSeconds = Math.floor(elapsedMs / 1000);
+  lastElapsedSeconds = elapsedSeconds;
   updateTimerDisplay(elapsedSeconds);
 
   const intervals = Math.floor(elapsedMs / BALL_SPEED_INCREASE_INTERVAL_MS);
@@ -367,9 +372,13 @@ function updateTimer() {
 }
 
 function updateTimerDisplay(totalSeconds) {
+  timerElement.textContent = formatTime(totalSeconds);
+}
+
+function formatTime(totalSeconds) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 function loseLife() {
@@ -392,6 +401,7 @@ function endGame(victory) {
   gameState = victory ? GAME_STATES.VICTORY : GAME_STATES.GAME_OVER;
   endTitle.textContent = victory ? 'Level Cleared!' : 'Out of Lives';
   finalScoreElement.textContent = score;
+  finalTimeElement.textContent = formatTime(lastElapsedSeconds);
   endScreen.classList.remove('overlay--hidden');
 }
 
@@ -399,6 +409,7 @@ function startGame() {
   resetGame();
   gameStartTime = performance.now();
   completedSpeedIntervals = 0;
+  lastElapsedSeconds = 0;
   updateTimerDisplay(0);
   gameState = GAME_STATES.PLAYING;
   startScreen.classList.add('overlay--hidden');
